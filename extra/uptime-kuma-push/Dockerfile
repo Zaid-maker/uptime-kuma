@@ -7,7 +7,7 @@ COPY --chown=kuma:kuma ./build/ ./build/
 COPY --chown=kuma:kuma build.js build.js
 RUN node build.js $TARGETPLATFORM
 
-FROM debian:bookworm-slim AS release
+FROM debian:12.6-slim AS release
 RUN useradd --create-home kuma
 USER kuma
 WORKDIR /home/kuma
