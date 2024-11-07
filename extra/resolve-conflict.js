@@ -3,6 +3,12 @@ const fs = require("fs");
 const path = require("path");
 const axios = require("axios");
 
+// Environment variables
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const PR_NUMBER = process.env.PR_NUMBER;
+const USE_AI = process.env.USE_AI === "true";
+
 /**
  * Executes a shell command and returns the trimmed output as a string.
  * If the command fails, it logs the error and returns null.
@@ -61,6 +67,45 @@ async function resolveWithAI(filePath) {
 }
 
 /**
+ * Resolve a Git merge conflict at the given file path manually using traditional Git methods.
+ *
+ * @param {string} filePath - The path to the file with the conflict.
+ *
+ * @returns {boolean} - True if the conflict was resolved successfully, false otherwise.
+ */
+function resolveManually(filePath) {
+    console.log(`Resolving conflict manually in ${filePath}`);
+
+    try {
+        runCommand(`git checkout --ours ${filePath}`);
+        runCommand(`git add ${filePath}`);
+        console.log(`Resolved ${filePath} with 'ours' strategy.`);
+        return true;
+    } catch (error) {
+        console.error(
+            `Error resolving ${filePath} with traditional methods:`,
+            error
+        );
+        return false;
+    }
+}
+
+/**
+ * Gets the cached Git diff for the specified file path.
+ *
+ * @param {string} filePath - The path to the file for which to generate the diff.
+ * @returns {string|null} - The diff output as a string, or null if an error occurs.
+ */
+function getFileDiff(filePath) {
+    try {
+        return runCommand(`git diff --cached ${filePath}`);
+    } catch (error) {
+        console.error(`Error generating diff for ${filePath}:`, error);
+        return null;
+    }
+}
+
+/**
  * Posts a comment to the current PR with the given body.
  *
  * @param {string} commentBody - The comment body to post to the PR.
@@ -102,10 +147,8 @@ async function postCommentToPR(commentBody) {
  * GITHUB_TOKEN and OPENAI_API_KEY environment variables are set.
  */
 async function main() {
-    if (!OPENAI_API_KEY || !GITHUB_TOKEN) {
-        console.error(
-            "Error: OPENAI_API_KEY or GITHUB_TOKEN environment variable is not set."
-        );
+    if (USE_AI && !OPENAI_API_KEY) {
+        console.error("Error: OPENAI_API_KEY environment variable is not set.");
         process.exit(1);
     }
 
@@ -116,25 +159,56 @@ async function main() {
     }
 
     console.log(`Conflicted files found: ${conflictedFiles.join(", ")}`);
-    let body = "### AI-Assisted Conflict Resolution Report\n\n";
+    let successComment = "### ✅ Successfully Resolved Files:\n\n";
+    let failureComment = "### ❌ Failed to Resolve Files:\n\n";
 
     for (const file of conflictedFiles) {
-        try {
-            console.log(`Attempting AI resolution for ${file}...`);
-            const aiResolvedContent = await resolveWithAI(file);
+        let resolved = false;
 
-            fs.writeFileSync(file, aiResolvedContent, "utf-8");
-            runCommand(`git add ${file}`);
-            console.log(`Resolved ${file} with AI assistance.`);
-            commentBody += `✅ Resolved \`${file}\` successfully.\n`;
+        try {
+            if (USE_AI) {
+                console.log(`Attempting AI resolution for ${file}...`);
+                const aiResolvedContent = await resolveWithAI(file);
+
+                if (aiResolvedContent) {
+                    fs.writeFileSync(file, aiResolvedContent, "utf-8");
+                    runCommand(`git add ${file}`);
+                    resolved = true;
+                    successComment += `- \`${file}\` resolved with AI.\n`;
+                } else {
+                    console.log(
+                        `AI resolution failed for ${file}, falling back...`
+                    );
+                }
+            }
+
+            if (!resolved) {
+                resolved = resolveManually(file);
+                if (resolved) {
+                    successComment += `- \`${file}\` resolved with 'ours' strategy.\n`;
+                } else {
+                    failureComment += `- \`${file}\` failed to resolve with traditional methods.\n`;
+                }
+            }
+
+            const diff = getFileDiff(file);
+            if (diff) {
+                successComment += `<details><summary>Diff for \`${file}\`</summary>\n\n\`\`\`diff\n${diff}\n\`\`\`\n</details>\n\n`;
+            }
         } catch (error) {
             console.error(`Error resolving ${file}:`, error);
-            commentBody += `❌ Could not resolve \`${file}\`: ${error}\n`;
+            failureComment += `- \`${file}\` failed due to error: ${error.message}\n`;
         }
     }
 
-    runCommand("git commit -m 'Auto-resolved conflicts with AI assistance'");
+    // Commit the resolved changes if there are any successful resolutions
+    if (successComment !== "### ✅ Successfully Resolved Files:\n\n") {
+        runCommand(
+            "git commit -m 'Auto-resolved conflicts with AI assistance or traditional methods'"
+        );
+    }
 
+    const commentBody = `${successComment}\n${failureComment}`;
     await postCommentToPR(commentBody);
 }
 
