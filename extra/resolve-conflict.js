@@ -86,6 +86,21 @@ async function postCommentToPR(commentBody) {
     }
 }
 
+/**
+ * Main entry point for this script.
+ *
+ * Checks out the given pull request in the given repository, resolves any
+ * merge conflicts using AI assistance, and commits the resolved files with a
+ * message indicating which files were resolved. If there are any errors during
+ * the process, the script will stop and not make any changes to the repository.
+ *
+ * After resolving all conflicts, the script will post a comment to the pull
+ * request with a report of which files were resolved, and any errors that
+ * occurred.
+ *
+ * This script is intended to be run from a GitHub Actions workflow, where the
+ * GITHUB_TOKEN and OPENAI_API_KEY environment variables are set.
+ */
 async function main() {
     if (!OPENAI_API_KEY || !GITHUB_TOKEN) {
         console.error(
