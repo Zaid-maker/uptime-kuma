@@ -39,8 +39,9 @@ jobs:
       uses: actions/cache@v3
       with:
         path: node_modules
-        key: ${{ runner.os }}-node-${{ matrix.node }}-${{ hashFiles('**/package-lock.json') }}
+        key: ${{ runner.os }}-node-${{ matrix.node }}-v1-${{ hashFiles('**/package-lock.json') }}
         restore-keys: |
+          ${{ runner.os }}-node-${{ matrix.node }}-v1-
           ${{ runner.os }}-node-${{ matrix.node }}-
           ${{ runner.os }}-node-
 
@@ -50,8 +51,9 @@ jobs:
       with:
         path: |
           dist
-        key: ${{ runner.os }}-build-${{ matrix.node }}-${{ github.sha }}
+        key: ${{ runner.os }}-build-${{ matrix.node }}-v1-${{ github.sha }}
         restore-keys: |
+          ${{ runner.os }}-build-${{ matrix.node }}-v1-
           ${{ runner.os }}-build-${{ matrix.node }}-
           ${{ runner.os }}-build-
 
@@ -114,8 +116,9 @@ jobs:
       uses: actions/cache@v3
       with:
         path: node_modules
-        key: ARM64-node-20-${{ hashFiles('**/package-lock.json') }}
+        key: ARM64-node-20-v1-${{ hashFiles('**/package-lock.json') }}
         restore-keys: |
+          ARM64-node-20-v1-
           ARM64-node-20-
           ARM64-node-
 
@@ -125,7 +128,7 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/.cache/ms-playwright
-        key: playwright-${{ hashFiles('**/package-lock.json') }}
+        key: playwright-v1-${{ hashFiles('**/package-lock.json') }}
 
     - run: npx playwright install
 
@@ -134,8 +137,9 @@ jobs:
       with:
         path: |
           dist
-        key: ARM64-build-20-${{ github.sha }}
+        key: ARM64-build-20-v1-${{ github.sha }}
         restore-keys: |
+          ARM64-build-20-v1-
           ARM64-build-20-
           ARM64-build-
 

@@ -1,0 +1,74 @@
+name: Cleanup Caches
+on:
+  schedule:
+    - cron: '0 */6 * * *'  # Run every 6 hours
+  workflow_dispatch:      # Allow manual trigger
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cleanup Caches
+        run: |
+          gh extension install actions/gh-actions-cache
+          
+          echo "Fetching cache list..."
+          CACHE_KEYS=$(gh actions-cache list -L 500 | cut -f 1)
+
+          # Define retention periods for different cache types
+          BUILD_RETENTION=24 # hours for build caches
+          NODE_RETENTION=72 # hours for node_modules
+          PLAYWRIGHT_RETENTION=168 # hours (7 days) for playwright
+
+          echo "$CACHE_KEYS" | while read -r KEY; do
+            if [[ -n "$KEY" ]]; then
+              CACHE_INFO=$(gh actions-cache list | grep "$KEY")
+              AGE=$(echo "$CACHE_INFO" | awk '{print $2}')
+              SIZE=$(echo "$CACHE_INFO" | awk '{print $3}')
+              
+              # Convert to hours
+              AGE_HOURS=$(( ( $(date +%s) - $(date -d "$AGE" +%s) ) / 3600 ))
+              
+              # Different retention periods based on cache type
+              if [[ "$KEY" == *"build"* ]]; then
+                if [[ $AGE_HOURS -gt $BUILD_RETENTION ]]; then
+                  echo "Deleting build cache: $KEY (${AGE}, ${SIZE})"
+                  gh actions-cache delete "$KEY" --confirm
+                fi
+              elif [[ "$KEY" == *"node"* ]]; then
+                if [[ $AGE_HOURS -gt $NODE_RETENTION ]]; then
+                  echo "Deleting node_modules cache: $KEY (${AGE}, ${SIZE})"
+                  gh actions-cache delete "$KEY" --confirm
+                fi
+              elif [[ "$KEY" == *"playwright"* ]]; then
+                if [[ $AGE_HOURS -gt $PLAYWRIGHT_RETENTION ]]; then
+                  echo "Deleting playwright cache: $KEY (${AGE}, ${SIZE})"
+                  gh actions-cache delete "$KEY" --confirm
+                fi
+              else
+                # Default retention: 48 hours for unknown cache types
+                if [[ $AGE_HOURS -gt 48 ]]; then
+                  echo "Deleting unknown cache: $KEY (${AGE}, ${SIZE})"
+                  gh actions-cache delete "$KEY" --confirm
+                fi
+              fi
+            fi
+          done
+
+          # Clean up caches from canceled/failed jobs
+          echo "Cleaning up incomplete caches..."
+          gh actions-cache list -L 500 | grep "In progress" | cut -f 1 | while read -r KEY; do
+            if [[ -n "$KEY" ]]; then
+              echo "Deleting incomplete cache: $KEY"
+              gh actions-cache delete "$KEY" --confirm
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Report Cache Status
+        run: |
+          echo "Current cache status:"
+          gh actions-cache list -L 10
+        env:
+          GH_TOKEN: ${{ github.token }}
